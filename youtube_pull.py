@@ -6,7 +6,12 @@ from dotenv import load_dotenv
 load_dotenv()
 
 API_KEY = os.getenv("YOUTUBE_API_KEY")
-CHANNEL_ID = "UCDYiFfeMpXPcMZCoboIp5KQ"
+
+CHANNELS = {
+    "podcast": "UCDYiFfeMpXPcMZCoboIp5KQ",
+    "yuna": "UCJe2Qttc2XCoIF1UUzooJeg",
+    "brian": "UCQ7oLvBwGZshwx8e6vV4wwQ"
+}
 
 
 def parse_duration_seconds(duration):
@@ -17,11 +22,11 @@ def parse_duration_seconds(duration):
     return hours * 3600 + minutes * 60 + seconds
 
 
-def get_channel_stats():
+def get_channel_stats(channel_id):
     url = "https://www.googleapis.com/youtube/v3/channels"
     params = {
         "part": "statistics",
-        "id": CHANNEL_ID,
+        "id": channel_id,
         "key": API_KEY
     }
     response = requests.get(url, params=params)
@@ -36,11 +41,11 @@ def get_channel_stats():
     }
 
 
-def get_recent_shorts(max_results=15):
+def get_recent_shorts(channel_id, max_results=15):
     search_url = "https://www.googleapis.com/youtube/v3/search"
     params = {
         "part": "snippet",
-        "channelId": CHANNEL_ID,
+        "channelId": channel_id,
         "order": "date",
         "maxResults": max_results,
         "type": "video",
@@ -49,6 +54,9 @@ def get_recent_shorts(max_results=15):
     resp = requests.get(search_url, params=params)
     resp.raise_for_status()
     video_ids = [item["id"]["videoId"] for item in resp.json()["items"]]
+
+    if not video_ids:
+        return []
 
     videos_url = "https://www.googleapis.com/youtube/v3/videos"
     params = {
@@ -73,9 +81,6 @@ def get_recent_shorts(max_results=15):
 
 
 if __name__ == "__main__":
-    stats = get_channel_stats()
-    print(stats)
-    shorts = get_recent_shorts()
-    print(f"Found {len(shorts)} shorts")
-    for s in shorts:
-        print(s)
+    for name, channel_id in CHANNELS.items():
+        stats = get_channel_stats(channel_id)
+        print(name, stats)
