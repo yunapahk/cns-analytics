@@ -39,46 +39,45 @@ def today_string():
 
 def write_subscriber_snapshot(sheet, subscribers):
     """
-    Writes subscriber history to columns A:B.
+    Personal channel layout:
 
     A = Subscribers
     B = Date
+
+    If today's row already exists, update it instead of
+    creating duplicate rows.
     """
-    existing_subscribers = sheet.col_values(1)
-    next_row = max(len(existing_subscribers) + 1, 2)
+    dates = sheet.col_values(2)
+    today = today_string()
+
+    if today in dates:
+        row_number = dates.index(today) + 1
+    else:
+        row_number = max(len(dates) + 1, 2)
 
     sheet.update(
-        range_name=f"A{next_row}:B{next_row}",
+        range_name=f"A{row_number}:B{row_number}",
         values=[[
             subscribers,
-            today_string(),
+            today,
         ]],
     )
 
 
-def upsert_content(
-    sheet,
-    content,
-    title_col,
-    views_col,
-    date_col,
-    video_id_col,
-):
+def upsert_regular_videos(sheet, videos):
     """
-    Adds new videos or Shorts when their video IDs are not present.
+    Regular-video layout:
 
-    Updates the title, views, and date when the video ID already exists.
+    E = Title
+    F = Views
+    G = Date checked
+    H = Video ID
     """
-
-    video_id_col_number = gspread.utils.a1_to_rowcol(
-        f"{video_id_col}1"
-    )[1]
-
-    existing_ids = sheet.col_values(video_id_col_number)
-
+    existing_ids = sheet.col_values(8)  # Column H
+    today = today_string()
     updates = []
 
-    for video in content:
+    for video in videos:
         video_id = video["video_id"]
 
         if video_id in existing_ids:
@@ -88,14 +87,51 @@ def upsert_content(
             existing_ids.append(video_id)
 
         updates.append({
-            "range": (
-                f"{title_col}{row_number}:"
-                f"{video_id_col}{row_number}"
-            ),
+            "range": f"E{row_number}:H{row_number}",
             "values": [[
                 video["title"],
                 video["views"],
-                today_string(),
+                today,
+                video_id,
+            ]],
+        })
+
+    if updates:
+        sheet.batch_update(updates)
+
+
+def upsert_shorts(sheet, shorts):
+    """
+    Shorts layout matching your current sheet:
+
+    J = Title
+    K = Views
+    L = Shorts
+    M = Date checked
+    N = Video ID
+
+    Column L receives the label "Short".
+    """
+    existing_ids = sheet.col_values(14)  # Column N
+    today = today_string()
+    updates = []
+
+    for short in shorts:
+        video_id = short["video_id"]
+
+        if video_id in existing_ids:
+            row_number = existing_ids.index(video_id) + 1
+        else:
+            row_number = max(len(existing_ids) + 1, 2)
+            existing_ids.append(video_id)
+
+        updates.append({
+            "range": f"J{row_number}:N{row_number}",
+            "values": [[
+                short["title"],
+                short["views"],
+                "Short",
+                today,
                 video_id,
             ]],
         })
@@ -118,38 +154,22 @@ def update_personal_channel(client, channel_key):
         max_results=50,
     )
 
-    # A:B — subscriber history
+    # A:B
     write_subscriber_snapshot(
         sheet,
         stats["subscribers"],
     )
 
-    # E:H — regular videos
-    # E = Title
-    # F = Views
-    # G = Date
-    # H = Video ID
-    upsert_content(
-        sheet=sheet,
-        content=content["videos"],
-        title_col="E",
-        views_col="F",
-        date_col="G",
-        video_id_col="H",
+    # E:H
+    upsert_regular_videos(
+        sheet,
+        content["videos"],
     )
 
-    # I:L — Shorts
-    # I = Title
-    # J = Views
-    # K = Date
-    # L = Video ID
-    upsert_content(
-        sheet=sheet,
-        content=content["shorts"],
-        title_col="I",
-        views_col="J",
-        date_col="K",
-        video_id_col="L",
+    # J:N
+    upsert_shorts(
+        sheet,
+        content["shorts"],
     )
 
     return {
@@ -161,7 +181,7 @@ def update_personal_channel(client, channel_key):
 
 def write_podcast_subscribers(client, subscribers):
     """
-    Keeps your existing podcast subscriber layout:
+    Keeps the podcast subscriber layout:
 
     E = Subscribers
     F = Date
@@ -170,65 +190,57 @@ def write_podcast_subscribers(client, subscribers):
         TAB_MAP["podcast"]
     )
 
-    existing_values = sheet.col_values(5)
-    next_row = max(len(existing_values) + 1, 2)
+    dates = sheet.col_values(6)
+    today = today_string()
+
+    if today in dates:
+        row_number = dates.index(today) + 1
+    else:
+        row_number = max(len(dates) + 1, 2)
 
     sheet.update(
-        range_name=f"E{next_row}:F{next_row}",
+        range_name=f"E{row_number}:F{row_number}",
         values=[[
             subscribers,
-            today_string(),
+            today,
         ]],
     )
 
 
 def write_podcast_shorts(client, shorts):
     """
-    Keeps podcast Shorts in the separate Shorts tab.
+    Keeps podcast Shorts in the dedicated Shorts tab.
 
-    Existing layout:
     A = Title
     B = Views
-    C = Last Checked
+    C = Last checked
     D = Published
     E = Video ID
     """
     sheet = client.open_by_key(SHEET_ID).worksheet("Shorts")
-    existing_rows = sheet.get_all_values()
-
-    video_id_col = [
-        row[4] if len(row) > 4 else ""
-        for row in existing_rows
-    ]
-
+    existing_ids = sheet.col_values(5)
+    today = today_string()
     updates = []
 
     for short in shorts:
         video_id = short["video_id"]
 
-        if video_id in video_id_col:
-            row_number = video_id_col.index(video_id) + 1
-
-            updates.append({
-                "range": f"A{row_number}:E{row_number}",
-                "values": [[
-                    short["title"],
-                    short["views"],
-                    today_string(),
-                    short["published"],
-                    video_id,
-                ]],
-            })
+        if video_id in existing_ids:
+            row_number = existing_ids.index(video_id) + 1
         else:
-            sheet.append_row([
+            row_number = max(len(existing_ids) + 1, 2)
+            existing_ids.append(video_id)
+
+        updates.append({
+            "range": f"A{row_number}:E{row_number}",
+            "values": [[
                 short["title"],
                 short["views"],
-                today_string(),
+                today,
                 short["published"],
                 video_id,
-            ])
-
-            video_id_col.append(video_id)
+            ]],
+        })
 
     if updates:
         sheet.batch_update(updates)
