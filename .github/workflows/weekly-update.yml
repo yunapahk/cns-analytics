@@ -22,7 +22,9 @@ jobs:
           pip install google-api-python-client google-auth gspread python-dotenv requests
 
       - name: Write service account file
-        run: printf '%s' "${{ secrets.SERVICE_ACCOUNT_JSON }}" > service-account.json
+        env:
+          SERVICE_ACCOUNT_JSON: ${{ secrets.SERVICE_ACCOUNT_JSON }}
+        run: printf '%s' "$SERVICE_ACCOUNT_JSON" > service-account.json
 
       - name: Run script
         env:
