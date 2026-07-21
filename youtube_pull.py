@@ -15,6 +15,10 @@ CHANNELS = {
 
 
 def parse_duration_seconds(duration):
+    """
+    Converts a YouTube ISO 8601 duration such as PT1M30S
+    into total seconds.
+    """
     match = re.fullmatch(
         r"PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?",
         duration,
@@ -31,6 +35,15 @@ def parse_duration_seconds(duration):
 
 
 def get_channel_stats(channel_id):
+    """
+    Returns subscriber count, total channel views,
+    and total number of uploads.
+    """
+    if not API_KEY:
+        raise ValueError(
+            "YOUTUBE_API_KEY was not found in your .env file."
+        )
+
     url = "https://www.googleapis.com/youtube/v3/channels"
 
     params = {
@@ -39,13 +52,19 @@ def get_channel_stats(channel_id):
         "key": API_KEY,
     }
 
-    response = requests.get(url, params=params, timeout=30)
+    response = requests.get(
+        url,
+        params=params,
+        timeout=30,
+    )
     response.raise_for_status()
 
     data = response.json()
 
     if not data.get("items"):
-        raise ValueError(f"No YouTube channel found for ID: {channel_id}")
+        raise ValueError(
+            f"No YouTube channel was found for ID: {channel_id}"
+        )
 
     stats = data["items"][0]["statistics"]
 
@@ -58,9 +77,21 @@ def get_channel_stats(channel_id):
 
 def get_recent_uploads(channel_id, max_results=50):
     """
-    Returns recent uploads with video ID, title, views,
-    publication date, duration, and duration in seconds.
+    Retrieves recent uploads for a channel.
+
+    Each returned item contains:
+    - video_id
+    - title
+    - views
+    - published
+    - duration
+    - duration_seconds
     """
+    if not API_KEY:
+        raise ValueError(
+            "YOUTUBE_API_KEY was not found in your .env file."
+        )
+
     search_url = "https://www.googleapis.com/youtube/v3/search"
 
     search_params = {
@@ -126,55 +157,100 @@ def get_recent_uploads(channel_id, max_results=50):
 
 
 def get_recent_shorts(channel_id, max_results=50):
-    uploads = get_recent_uploads(channel_id, max_results)
+    """
+    Returns uploads that are three minutes or shorter.
+    """
+    uploads = get_recent_uploads(
+        channel_id,
+        max_results=max_results,
+    )
 
     return [
-        video
-        for video in uploads
-        if video["duration_seconds"] <= 180
+        upload
+        for upload in uploads
+        if upload["duration_seconds"] <= 180
     ]
 
 
 def get_recent_videos(channel_id, max_results=50):
-    uploads = get_recent_uploads(channel_id, max_results)
+    """
+    Returns uploads longer than three minutes.
+    """
+    uploads = get_recent_uploads(
+        channel_id,
+        max_results=max_results,
+    )
 
     return [
-        video
-        for video in uploads
-        if video["duration_seconds"] > 180
+        upload
+        for upload in uploads
+        if upload["duration_seconds"] > 180
     ]
 
 
 def get_recent_content(channel_id, max_results=50):
     """
-    Retrieves uploads once, then splits them into videos and Shorts.
-
-    This avoids making the same API requests twice.
+    Retrieves uploads once and separates them into
+    regular videos and Shorts.
     """
-    uploads = get_recent_uploads(channel_id, max_results)
+    uploads = get_recent_uploads(
+        channel_id,
+        max_results=max_results,
+    )
+
+    videos = []
+    shorts = []
+
+    for upload in uploads:
+        if upload["duration_seconds"] <= 180:
+            shorts.append(upload)
+        else:
+            videos.append(upload)
 
     return {
-        "videos": [
-            video
-            for video in uploads
-            if video["duration_seconds"] > 180
-        ],
-        "shorts": [
-            video
-            for video in uploads
-            if video["duration_seconds"] <= 180
-        ],
+        "videos": videos,
+        "shorts": shorts,
     }
 
 
 if __name__ == "__main__":
-    for name, channel_id in CHANNELS.items():
-        stats = get_channel_stats(channel_id)
-        content = get_recent_content(channel_id)
+    for channel_name, channel_id in CHANNELS.items():
+        try:
+            stats = get_channel_stats(channel_id)
 
-        print(
-            f"{name}: "
-            f"{stats['subscribers']} subscribers, "
-            f"{len(content['videos'])} recent videos, "
-            f"{len(content['shorts'])} recent Shorts"
-        )
+            content = get_recent_content(
+                channel_id,
+                max_results=50,
+            )
+
+            print(f"\n{channel_name.upper()}")
+            print(
+                f"{stats['subscribers']} subscribers | "
+                f"{stats['views']} total views | "
+                f"{stats['videos']} uploads"
+            )
+            print(
+                f"Found {len(content['videos'])} regular videos "
+                f"and {len(content['shorts'])} Shorts"
+            )
+
+            for video in content["videos"]:
+                print(
+                    f"VIDEO | {video['title']} | "
+                    f"{video['views']} views"
+                )
+
+            for short in content["shorts"]:
+                print(
+                    f"SHORT | {short['title']} | "
+                    f"{short['views']} views"
+                )
+
+        except requests.RequestException as error:
+            print(
+                f"Could not retrieve {channel_name}: {error}"
+            )
+        except (ValueError, KeyError) as error:
+            print(
+                f"Could not process {channel_name}: {error}"
+            )
