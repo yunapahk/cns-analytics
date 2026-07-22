@@ -42,16 +42,10 @@ def today_string():
 
 
 # =========================================================
-# PODCAST YOUTUBE TAB
+# PODCAST YOUTUBE TAB (subs - unchanged, already correct)
 # =========================================================
 
 def write_podcast_subscriber_snapshot(client, subscribers):
-    """
-    YouTube tab layout:
-
-    E = Subscribers
-    F = Date
-    """
     sheet = client.open_by_key(SHEET_ID).worksheet(TAB_MAP["podcast"])
     dates = sheet.col_values(6)
     today = today_string()
@@ -68,34 +62,43 @@ def write_podcast_subscriber_snapshot(client, subscribers):
 
 
 # =========================================================
-# PODCAST SHORTS TAB
+# PODCAST SHORTS TAB (now appends daily history per video)
 # =========================================================
 
 def write_podcast_shorts(client, shorts):
     """
     Shorts tab layout:
+    A = Title, B = Views, C = Date checked, D = Published date, E = Video ID
 
-    A = Title
-    B = Views
-    C = Date checked
-    D = Published date
-    E = Video ID
+    Appends a NEW row per video per day, so growth over time
+    is visible. Skips a video only if it was already logged
+    today (prevents duplicates from re-running the script).
     """
     sheet = client.open_by_key(SHEET_ID).worksheet("Shorts")
 
-    existing_ids = sheet.col_values(5)
+    existing_video_ids = sheet.col_values(5)
+    existing_dates = sheet.col_values(3)
     today = today_string()
 
+    already_logged_today = set()
+    for i in range(len(existing_video_ids)):
+        vid = existing_video_ids[i]
+        checked = existing_dates[i] if i < len(existing_dates) else ""
+        if checked == today:
+            already_logged_today.add(vid)
+
+    current_length = len(existing_video_ids)
     updates = []
+    new_row_offset = 0
 
     for short in shorts:
         video_id = short["video_id"]
 
-        if video_id in existing_ids:
-            row_number = existing_ids.index(video_id) + 1
-        else:
-            row_number = max(len(existing_ids) + 1, 2)
-            existing_ids.append(video_id)
+        if video_id in already_logged_today:
+            continue
+
+        row_number = current_length + 1 + new_row_offset
+        new_row_offset += 1
 
         updates.append({
             "range": f"A{row_number}:E{row_number}",
@@ -113,16 +116,10 @@ def write_podcast_shorts(client, shorts):
 
 
 # =========================================================
-# PERSONAL CHANNEL SUBSCRIBERS
+# PERSONAL CHANNEL SUBSCRIBERS (unchanged, already correct)
 # =========================================================
 
 def write_personal_subscriber_snapshot(sheet, subscribers):
-    """
-    Yuna YT / Brian YT layout:
-
-    A = Subs
-    B = Date
-    """
     dates = sheet.col_values(2)
     today = today_string()
 
@@ -138,31 +135,37 @@ def write_personal_subscriber_snapshot(sheet, subscribers):
 
 
 # =========================================================
-# PERSONAL CHANNEL REGULAR VIDEOS
+# PERSONAL CHANNEL REGULAR VIDEOS (now appends daily history)
 # =========================================================
 
-def upsert_personal_videos(sheet, videos):
+def append_personal_videos(sheet, videos):
     """
     Yuna YT / Brian YT regular-video layout:
-
-    D = Title
-    E = Views
-    F = Date
-    G = Video ID
+    D = Title, E = Views, F = Date, G = Video ID
     """
-    existing_ids = sheet.col_values(7)
+    existing_video_ids = sheet.col_values(7)
+    existing_dates = sheet.col_values(6)
     today = today_string()
 
+    already_logged_today = set()
+    for i in range(len(existing_video_ids)):
+        vid = existing_video_ids[i]
+        checked = existing_dates[i] if i < len(existing_dates) else ""
+        if checked == today:
+            already_logged_today.add(vid)
+
+    current_length = len(existing_video_ids)
     updates = []
+    new_row_offset = 0
 
     for video in videos:
         video_id = video["video_id"]
 
-        if video_id in existing_ids:
-            row_number = existing_ids.index(video_id) + 1
-        else:
-            row_number = max(len(existing_ids) + 1, 2)
-            existing_ids.append(video_id)
+        if video_id in already_logged_today:
+            continue
+
+        row_number = current_length + 1 + new_row_offset
+        new_row_offset += 1
 
         updates.append({
             "range": f"D{row_number}:G{row_number}",
@@ -179,32 +182,37 @@ def upsert_personal_videos(sheet, videos):
 
 
 # =========================================================
-# PERSONAL CHANNEL SHORTS
+# PERSONAL CHANNEL SHORTS (now appends daily history)
 # =========================================================
 
-def upsert_personal_shorts(sheet, shorts):
+def append_personal_shorts(sheet, shorts):
     """
     Yuna YT / Brian YT Shorts layout:
-
-    I = Title
-    J = Views
-    K = Shorts
-    L = Date
-    M = Video ID
+    I = Title, J = Views, K = Shorts, L = Date, M = Video ID
     """
-    existing_ids = sheet.col_values(13)
+    existing_video_ids = sheet.col_values(13)
+    existing_dates = sheet.col_values(12)
     today = today_string()
 
+    already_logged_today = set()
+    for i in range(len(existing_video_ids)):
+        vid = existing_video_ids[i]
+        checked = existing_dates[i] if i < len(existing_dates) else ""
+        if checked == today:
+            already_logged_today.add(vid)
+
+    current_length = len(existing_video_ids)
     updates = []
+    new_row_offset = 0
 
     for short in shorts:
         video_id = short["video_id"]
 
-        if video_id in existing_ids:
-            row_number = existing_ids.index(video_id) + 1
-        else:
-            row_number = max(len(existing_ids) + 1, 2)
-            existing_ids.append(video_id)
+        if video_id in already_logged_today:
+            continue
+
+        row_number = current_length + 1 + new_row_offset
+        new_row_offset += 1
 
         updates.append({
             "range": f"I{row_number}:M{row_number}",
@@ -226,11 +234,6 @@ def upsert_personal_shorts(sheet, shorts):
 # =========================================================
 
 def update_personal_youtube_tab(client, channel_key):
-    """
-    Updates either:
-    - Yuna YT
-    - Brian YT
-    """
     sheet = client.open_by_key(SHEET_ID).worksheet(TAB_MAP[channel_key])
 
     channel_id = CHANNELS[channel_key]
@@ -241,9 +244,9 @@ def update_personal_youtube_tab(client, channel_key):
 
     write_personal_subscriber_snapshot(sheet, stats["subscribers"])
 
-    upsert_personal_videos(sheet, content["videos"])
+    append_personal_videos(sheet, content["videos"])
 
-    upsert_personal_shorts(sheet, content["shorts"])
+    append_personal_shorts(sheet, content["shorts"])
 
     return {
         "subscribers": stats["subscribers"],
@@ -262,7 +265,6 @@ if __name__ == "__main__":
 
     results_summary = []
 
-    # --- Podcast subs ---
     try:
         podcast_stats = get_channel_stats(CHANNELS["podcast"])
         write_podcast_subscriber_snapshot(client, podcast_stats["subscribers"])
@@ -271,7 +273,6 @@ if __name__ == "__main__":
         print(f"FAILED - Podcast subs: {error}")
         results_summary.append("Podcast: FAILED")
 
-    # --- Podcast Shorts ---
     try:
         podcast_shorts = get_recent_shorts(CHANNELS["podcast"], max_results=50)
         write_podcast_shorts(client, podcast_shorts)
@@ -280,7 +281,6 @@ if __name__ == "__main__":
         print(f"FAILED - Podcast Shorts: {error}")
         results_summary.append("Podcast Shorts: FAILED")
 
-    # --- Yuna YT ---
     try:
         yuna_results = update_personal_youtube_tab(client, "yuna")
         results_summary.append(
@@ -292,7 +292,6 @@ if __name__ == "__main__":
         print(f"FAILED - Yuna YT: {error}")
         results_summary.append("Yuna YT: FAILED")
 
-    # --- Brian YT ---
     try:
         brian_results = update_personal_youtube_tab(client, "brian")
         results_summary.append(
