@@ -43,30 +43,19 @@ def today_string():
 # =========================================================
 
 def write_podcast_subscriber_snapshot(client, subscribers):
-    """
-    YouTube tab layout:
-
-    E = Subscribers
-    F = Date
-    """
-    sheet = client.open_by_key(SHEET_ID).worksheet(
-        TAB_MAP["podcast"]
-    )
-
+    sheet = client.open_by_key(SHEET_ID).worksheet(TAB_MAP["podcast"])
     dates = sheet.col_values(6)
     today = today_string()
 
-    if today in dates:
-        row_number = dates.index(today) + 1
+    # Only overwrite if the LAST row is already today — never search all history
+    if len(dates) > 1 and dates[-1] == today:
+        row_number = len(dates)
     else:
-        row_number = max(len(dates) + 1, 2)
+        row_number = len(dates) + 1
 
     sheet.update(
         range_name=f"E{row_number}:F{row_number}",
-        values=[[
-            subscribers,
-            today,
-        ]],
+        values=[[subscribers, today]],
     )
 
 
@@ -120,26 +109,17 @@ def write_podcast_shorts(client, shorts):
 # =========================================================
 
 def write_personal_subscriber_snapshot(sheet, subscribers):
-    """
-    Yuna YT / Brian YT layout:
-
-    A = Subs
-    B = Date
-    """
     dates = sheet.col_values(2)
     today = today_string()
 
-    if today in dates:
-        row_number = dates.index(today) + 1
+    if len(dates) > 1 and dates[-1] == today:
+        row_number = len(dates)
     else:
-        row_number = max(len(dates) + 1, 2)
+        row_number = len(dates) + 1
 
     sheet.update(
         range_name=f"A{row_number}:B{row_number}",
-        values=[[
-            subscribers,
-            today,
-        ]],
+        values=[[subscribers, today]],
     )
 
 
