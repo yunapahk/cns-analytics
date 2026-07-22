@@ -1,5 +1,7 @@
 import gspread
 from datetime import date
+from zoneinfo import ZoneInfo
+import datetime as dt
 from google.oauth2.service_account import Credentials
 
 from youtube_pull import (
@@ -35,8 +37,8 @@ def get_client():
 
 
 def today_string():
-    return date.today().strftime("%m/%d/%Y")
-
+    pacific = ZoneInfo("America/Los_Angeles")
+    return dt.datetime.now(pacific).strftime("%m/%d/%Y")
 
 # =========================================================
 # PODCAST YOUTUBE TAB
