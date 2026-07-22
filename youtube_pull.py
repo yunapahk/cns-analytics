@@ -1,8 +1,8 @@
 import os
 import re
+import time
 import requests
 from dotenv import load_dotenv
-import time
 
 load_dotenv()
 
@@ -34,6 +34,7 @@ def parse_duration_seconds(duration):
 
     return hours * 3600 + minutes * 60 + seconds
 
+
 def request_with_retry(url, params, max_attempts=3, delay_seconds=3):
     """
     Makes a GET request with automatic retries on
@@ -57,6 +58,7 @@ def request_with_retry(url, params, max_attempts=3, delay_seconds=3):
                 time.sleep(delay_seconds)
 
     raise last_error
+
 
 def get_channel_stats(channel_id):
     """
@@ -122,12 +124,7 @@ def get_recent_uploads(channel_id, max_results=50):
         "key": API_KEY,
     }
 
-    response = requests.get(
-        search_url,
-        params=search_params,
-        timeout=30,
-    )
-    response.raise_for_status()
+    response = request_with_retry(search_url, search_params)
 
     search_items = response.json().get("items", [])
 
@@ -174,10 +171,7 @@ def get_recent_shorts(channel_id, max_results=50):
     """
     Returns uploads that are three minutes or shorter.
     """
-    uploads = get_recent_uploads(
-        channel_id,
-        max_results=max_results,
-    )
+    uploads = get_recent_uploads(channel_id, max_results=max_results)
 
     return [
         upload
@@ -190,10 +184,7 @@ def get_recent_videos(channel_id, max_results=50):
     """
     Returns uploads longer than three minutes.
     """
-    uploads = get_recent_uploads(
-        channel_id,
-        max_results=max_results,
-    )
+    uploads = get_recent_uploads(channel_id, max_results=max_results)
 
     return [
         upload
@@ -207,10 +198,7 @@ def get_recent_content(channel_id, max_results=50):
     Retrieves uploads once and separates them into
     regular videos and Shorts.
     """
-    uploads = get_recent_uploads(
-        channel_id,
-        max_results=max_results,
-    )
+    uploads = get_recent_uploads(channel_id, max_results=max_results)
 
     videos = []
     shorts = []
@@ -232,10 +220,7 @@ if __name__ == "__main__":
         try:
             stats = get_channel_stats(channel_id)
 
-            content = get_recent_content(
-                channel_id,
-                max_results=50,
-            )
+            content = get_recent_content(channel_id, max_results=50)
 
             print(f"\n{channel_name.upper()}")
             print(
@@ -249,22 +234,12 @@ if __name__ == "__main__":
             )
 
             for video in content["videos"]:
-                print(
-                    f"VIDEO | {video['title']} | "
-                    f"{video['views']} views"
-                )
+                print(f"VIDEO | {video['title']} | {video['views']} views")
 
             for short in content["shorts"]:
-                print(
-                    f"SHORT | {short['title']} | "
-                    f"{short['views']} views"
-                )
+                print(f"SHORT | {short['title']} | {short['views']} views")
 
         except requests.RequestException as error:
-            print(
-                f"Could not retrieve {channel_name}: {error}"
-            )
+            print(f"Could not retrieve {channel_name}: {error}")
         except (ValueError, KeyError) as error:
-            print(
-                f"Could not process {channel_name}: {error}"
-            )
+            print(f"Could not process {channel_name}: {error}")

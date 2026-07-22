@@ -40,16 +40,22 @@ def today_string():
     pacific = ZoneInfo("America/Los_Angeles")
     return dt.datetime.now(pacific).strftime("%m/%d/%Y")
 
+
 # =========================================================
 # PODCAST YOUTUBE TAB
 # =========================================================
 
 def write_podcast_subscriber_snapshot(client, subscribers):
+    """
+    YouTube tab layout:
+
+    E = Subscribers
+    F = Date
+    """
     sheet = client.open_by_key(SHEET_ID).worksheet(TAB_MAP["podcast"])
     dates = sheet.col_values(6)
     today = today_string()
 
-    # Only overwrite if the LAST row is already today — never search all history
     if len(dates) > 1 and dates[-1] == today:
         row_number = len(dates)
     else:
@@ -111,6 +117,12 @@ def write_podcast_shorts(client, shorts):
 # =========================================================
 
 def write_personal_subscriber_snapshot(sheet, subscribers):
+    """
+    Yuna YT / Brian YT layout:
+
+    A = Subs
+    B = Date
+    """
     dates = sheet.col_values(2)
     today = today_string()
 
@@ -219,33 +231,19 @@ def update_personal_youtube_tab(client, channel_key):
     - Yuna YT
     - Brian YT
     """
-    sheet = client.open_by_key(SHEET_ID).worksheet(
-        TAB_MAP[channel_key]
-    )
+    sheet = client.open_by_key(SHEET_ID).worksheet(TAB_MAP[channel_key])
 
     channel_id = CHANNELS[channel_key]
 
     stats = get_channel_stats(channel_id)
 
-    content = get_recent_content(
-        channel_id,
-        max_results=50,
-    )
+    content = get_recent_content(channel_id, max_results=50)
 
-    write_personal_subscriber_snapshot(
-        sheet,
-        stats["subscribers"],
-    )
+    write_personal_subscriber_snapshot(sheet, stats["subscribers"])
 
-    upsert_personal_videos(
-        sheet,
-        content["videos"],
-    )
+    upsert_personal_videos(sheet, content["videos"])
 
-    upsert_personal_shorts(
-        sheet,
-        content["shorts"],
-    )
+    upsert_personal_shorts(sheet, content["shorts"])
 
     return {
         "subscribers": stats["subscribers"],
@@ -255,52 +253,55 @@ def update_personal_youtube_tab(client, channel_key):
 
 
 # =========================================================
-# RUN EVERYTHING
+# RUN EVERYTHING (each section isolated so one failure
+# doesn't stop the others)
 # =========================================================
 
 if __name__ == "__main__":
     client = get_client()
 
-    # Podcast YouTube subscriber count
-    podcast_stats = get_channel_stats(
-        CHANNELS["podcast"]
-    )
+    results_summary = []
 
-    write_podcast_subscriber_snapshot(
-        client,
-        podcast_stats["subscribers"],
-    )
+    # --- Podcast subs ---
+    try:
+        podcast_stats = get_channel_stats(CHANNELS["podcast"])
+        write_podcast_subscriber_snapshot(client, podcast_stats["subscribers"])
+        results_summary.append(f"Podcast: {podcast_stats['subscribers']} subs")
+    except Exception as error:
+        print(f"FAILED - Podcast subs: {error}")
+        results_summary.append("Podcast: FAILED")
 
-    # Podcast Shorts tab
-    podcast_shorts = get_recent_shorts(
-        CHANNELS["podcast"],
-        max_results=50,
-    )
+    # --- Podcast Shorts ---
+    try:
+        podcast_shorts = get_recent_shorts(CHANNELS["podcast"], max_results=50)
+        write_podcast_shorts(client, podcast_shorts)
+        results_summary.append(f"{len(podcast_shorts)} podcast Shorts processed")
+    except Exception as error:
+        print(f"FAILED - Podcast Shorts: {error}")
+        results_summary.append("Podcast Shorts: FAILED")
 
-    write_podcast_shorts(
-        client,
-        podcast_shorts,
-    )
+    # --- Yuna YT ---
+    try:
+        yuna_results = update_personal_youtube_tab(client, "yuna")
+        results_summary.append(
+            f"Yuna: {yuna_results['subscribers']} subs, "
+            f"{yuna_results['videos_processed']} videos, "
+            f"{yuna_results['shorts_processed']} Shorts"
+        )
+    except Exception as error:
+        print(f"FAILED - Yuna YT: {error}")
+        results_summary.append("Yuna YT: FAILED")
 
-    # Yuna YT tab
-    yuna_results = update_personal_youtube_tab(
-        client,
-        "yuna",
-    )
+    # --- Brian YT ---
+    try:
+        brian_results = update_personal_youtube_tab(client, "brian")
+        results_summary.append(
+            f"Brian: {brian_results['subscribers']} subs, "
+            f"{brian_results['videos_processed']} videos, "
+            f"{brian_results['shorts_processed']} Shorts"
+        )
+    except Exception as error:
+        print(f"FAILED - Brian YT: {error}")
+        results_summary.append("Brian YT: FAILED")
 
-    # Brian YT tab
-    brian_results = update_personal_youtube_tab(
-        client,
-        "brian",
-    )
-
-    print(
-        f"Podcast: {podcast_stats['subscribers']} subs | "
-        f"{len(podcast_shorts)} podcast Shorts processed | "
-        f"Yuna: {yuna_results['subscribers']} subs, "
-        f"{yuna_results['videos_processed']} videos, "
-        f"{yuna_results['shorts_processed']} Shorts | "
-        f"Brian: {brian_results['subscribers']} subs, "
-        f"{brian_results['videos_processed']} videos, "
-        f"{brian_results['shorts_processed']} Shorts"
-    )
+    print(" | ".join(results_summary))
