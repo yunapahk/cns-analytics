@@ -2,6 +2,7 @@ import os
 import re
 import requests
 from dotenv import load_dotenv
+import time
 
 load_dotenv()
 
@@ -33,6 +34,29 @@ def parse_duration_seconds(duration):
 
     return hours * 3600 + minutes * 60 + seconds
 
+def request_with_retry(url, params, max_attempts=3, delay_seconds=3):
+    """
+    Makes a GET request with automatic retries on
+    connection errors. Raises the last error if all
+    attempts fail.
+    """
+    last_error = None
+
+    for attempt in range(1, max_attempts + 1):
+        try:
+            response = requests.get(url, params=params, timeout=30)
+            response.raise_for_status()
+            return response
+        except requests.RequestException as error:
+            last_error = error
+            if attempt < max_attempts:
+                print(
+                    f"Request failed (attempt {attempt}/{max_attempts}): "
+                    f"{error}. Retrying in {delay_seconds}s..."
+                )
+                time.sleep(delay_seconds)
+
+    raise last_error
 
 def get_channel_stats(channel_id):
     """
@@ -52,12 +76,7 @@ def get_channel_stats(channel_id):
         "key": API_KEY,
     }
 
-    response = requests.get(
-        url,
-        params=params,
-        timeout=30,
-    )
-    response.raise_for_status()
+    response = request_with_retry(url, params)
 
     data = response.json()
 
@@ -129,12 +148,7 @@ def get_recent_uploads(channel_id, max_results=50):
         "key": API_KEY,
     }
 
-    response = requests.get(
-        videos_url,
-        params=videos_params,
-        timeout=30,
-    )
-    response.raise_for_status()
+    response = request_with_retry(videos_url, videos_params)
 
     uploads = []
 
